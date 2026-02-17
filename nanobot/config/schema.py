@@ -268,7 +268,7 @@ class UniverseConfig(BaseModel):
 
     # Public universe: registry discovery + direct node-to-node calls (opt-in).
     public_enabled: bool = False
-    public_registry_url: str = "ws://127.0.0.1:18999"
+    public_registry_url: str = "ws://82.157.31.6:18999"
     public_provide_service: bool = False
     public_service_host: str = "0.0.0.0"
     public_service_port: int = 18998
@@ -277,6 +277,12 @@ class UniverseConfig(BaseModel):
     public_price_points: int = 1  # points awarded per completed task (MVP bookkeeping)
     public_max_tokens: int = 1024  # hard cap for remote tasks
     public_capabilities: dict[str, Any] = Field(default_factory=lambda: {"llm.chat": True, "echo": True})
+    public_auto_register: bool = False
+    public_advertise_url: str = ""  # if set, overrides auto detection (e.g. ws://example.com:18998)
+    public_advertise_host: str = ""  # optional host for advertise URL (uses public_service_port)
+    public_advertise_port: int | None = None  # optional override for advertise port
+    public_detect_public_ip: bool = False  # if true, use external IP detection
+    public_detect_ip_service: str = "https://api.ipify.org"
 
     # Public service behavior
     public_allow_agent_tasks: bool = False  # allow kind="nanobot.agent"

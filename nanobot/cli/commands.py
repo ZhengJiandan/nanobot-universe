@@ -409,6 +409,8 @@ def gateway(
     console.print(f"[green]✓[/green] Heartbeat: every 30m")
     
     async def run():
+        from nanobot.universe.public_service import maybe_start_public_service, stop_public_service
+        public_handle = await maybe_start_public_service(config, log_prefix="universe")
         try:
             await cron.start()
             await heartbeat.start()
@@ -419,6 +421,7 @@ def gateway(
         except KeyboardInterrupt:
             console.print("\nShutting down...")
         finally:
+            await stop_public_service(public_handle)
             await agent.close_mcp()
             heartbeat.stop()
             cron.stop()
@@ -485,10 +488,15 @@ def agent(
     if message:
         # Single message mode
         async def run_once():
-            with _thinking_ctx():
-                response = await agent_loop.process_direct(message, session_id)
-            _print_agent_response(response, render_markdown=markdown)
-            await agent_loop.close_mcp()
+            from nanobot.universe.public_service import maybe_start_public_service, stop_public_service
+            public_handle = await maybe_start_public_service(config, log_prefix="universe")
+            try:
+                with _thinking_ctx():
+                    response = await agent_loop.process_direct(message, session_id)
+                _print_agent_response(response, render_markdown=markdown)
+            finally:
+                await stop_public_service(public_handle)
+                await agent_loop.close_mcp()
         
         asyncio.run(run_once())
     else:
@@ -504,6 +512,8 @@ def agent(
         signal.signal(signal.SIGINT, _exit_on_sigint)
         
         async def run_interactive():
+            from nanobot.universe.public_service import maybe_start_public_service, stop_public_service
+            public_handle = await maybe_start_public_service(config, log_prefix="universe")
             try:
                 while True:
                     try:
@@ -530,6 +540,7 @@ def agent(
                         console.print("\nGoodbye!")
                         break
             finally:
+                await stop_public_service(public_handle)
                 await agent_loop.close_mcp()
         
         asyncio.run(run_interactive())

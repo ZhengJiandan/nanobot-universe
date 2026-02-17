@@ -280,6 +280,21 @@ def public_enable(
     auto_delegate: bool = typer.Option(
         None, "--auto-delegate/--no-auto-delegate", help="Auto-delegate to universe when local run is blocked"
     ),
+    auto_register: bool = typer.Option(
+        None, "--auto-register/--no-auto-register", help="Auto-register to registry at startup"
+    ),
+    advertise_url: str = typer.Option(
+        None, "--advertise-url", help="Advertise URL override, e.g. ws://example.com:18998"
+    ),
+    advertise_host: str = typer.Option(
+        None, "--advertise-host", help="Advertise host override (uses service port)"
+    ),
+    advertise_port: int = typer.Option(
+        None, "--advertise-port", help="Advertise port override"
+    ),
+    detect_public_ip: bool = typer.Option(
+        None, "--detect-public-ip/--no-detect-public-ip", help="Detect public IP for advertise URL"
+    ),
 ):
     """Enable public universe mode (opt-in)."""
     cfg = load_config()
@@ -295,6 +310,16 @@ def public_enable(
         cfg.universe.public_allow_agent_tasks = allow_agent_tasks
     if auto_delegate is not None:
         cfg.universe.public_auto_delegate_enabled = auto_delegate
+    if auto_register is not None:
+        cfg.universe.public_auto_register = auto_register
+    if advertise_url is not None:
+        cfg.universe.public_advertise_url = advertise_url
+    if advertise_host is not None:
+        cfg.universe.public_advertise_host = advertise_host
+    if advertise_port is not None:
+        cfg.universe.public_advertise_port = advertise_port
+    if detect_public_ip is not None:
+        cfg.universe.public_detect_public_ip = detect_public_ip
     save_config(cfg)
     console.print("[green]✓[/green] Public universe enabled.")
 
@@ -366,10 +391,7 @@ def public_serve(
     registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
 ):
     """Run a public service node and register it in the registry."""
-    import websockets
-
-    from nanobot.universe.node_server import NodeServer, NodeServerConfig
-    from nanobot.universe.protocol import Envelope, make_envelope
+    from nanobot.universe.public_service import start_public_service, stop_public_service
 
     cfg = load_config()
     node_id = _ensure_node_id()
@@ -380,86 +402,30 @@ def public_serve(
         console.print("[yellow]![/yellow] This node is not set to provide service. Re-run enable with --provide")
         raise typer.Exit(1)
 
-    reg = registry or cfg.universe.public_registry_url
-    bind_host = host or cfg.universe.public_service_host
-    bind_port = port or cfg.universe.public_service_port
-    svc_token = cfg.universe.public_service_token
-
-    node_name = name or cfg.universe.node_name or ""
-    price_points = int(price if price is not None else cfg.universe.public_price_points)
-    caps = cfg.universe.public_capabilities or {"llm.chat": True}
-    # Advertise nanobot.agent capability only when explicitly allowed.
-    if cfg.universe.public_allow_agent_tasks:
-        caps = {**caps, "nanobot.agent": True}
-    else:
-        caps = {k: v for k, v in caps.items() if k != "nanobot.agent"}
-    reg_token = registry_token if registry_token is not None else cfg.universe.public_registry_token
-
-    async def _register_loop(endpoint_url: str):
-        backoff = 1.0
-        while True:
-            try:
-                async with websockets.connect(reg) as ws:
-                    env = make_envelope(
-                        "register",
-                        from_node=node_id,
-                        payload={
-                            "nodeId": node_id,
-                            "nodeName": node_name,
-                            "endpointUrl": endpoint_url,
-                            "capabilities": caps,
-                            "pricePoints": price_points,
-                            "registryToken": reg_token,
-                        },
-                    )
-                    await ws.send(env.to_json())
-                    # wait for ok
-                    resp = Envelope.from_json(await ws.recv())
-                    if resp.type != "register_ok":
-                        raise RuntimeError(resp.payload.get("message", "register failed"))
-                    console.print(f"[green]✓[/green] Registered in registry {reg} as {node_id}")
-
-                    backoff = 1.0
-                    # keep connection open; periodic update as heartbeat
-                    while True:
-                        await asyncio.sleep(30)
-                        upd = make_envelope(
-                            "update",
-                            from_node=node_id,
-                            payload={
-                                "nodeId": node_id,
-                                "nodeName": node_name,
-                                "endpointUrl": endpoint_url,
-                                "capabilities": caps,
-                                "pricePoints": price_points,
-                                "registryToken": reg_token,
-                            },
-                        )
-                        await ws.send(upd.to_json())
-                        _ = await ws.recv()
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                console.print(f"[yellow]![/yellow] Registry connection failed ({e}); retrying in {backoff:.0f}s")
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 30.0)
-
     async def _run():
-        server = NodeServer(NodeServerConfig(host=bind_host, port=bind_port, service_token=svc_token))
-        await server.start()
+        # Apply overrides on a local copy (do not persist).
+        cfg_local = cfg.model_copy(deep=True)
+        if registry is not None:
+            cfg_local.universe.public_registry_url = registry
+        if host is not None:
+            cfg_local.universe.public_service_host = host
+        if port is not None:
+            cfg_local.universe.public_service_port = port
+        if advertise is not None:
+            cfg_local.universe.public_advertise_url = advertise
+        if name is not None:
+            cfg_local.universe.node_name = name
+        if price is not None:
+            cfg_local.universe.public_price_points = int(price)
+        if registry_token is not None:
+            cfg_local.universe.public_registry_token = registry_token
 
-        endpoint_url = advertise
-        if not endpoint_url:
-            # Default to localhost for MVP; for LAN/public usage set --advertise.
-            endpoint_url = f"ws://127.0.0.1:{server.bound_port}"
-
-        reg_task = asyncio.create_task(_register_loop(endpoint_url))
+        handle = await start_public_service(cfg_local, log_prefix="universe")
         try:
             console.print("[dim]Serving... Ctrl+C to stop[/dim]")
             await asyncio.Future()
         finally:
-            reg_task.cancel()
-            await server.stop()
+            await stop_public_service(handle)
 
     try:
         asyncio.run(_run())
