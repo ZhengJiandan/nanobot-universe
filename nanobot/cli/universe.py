@@ -274,6 +274,12 @@ def public_enable(
     registry: str = typer.Option(None, "--registry", help="Registry URL, e.g. ws://host:18999"),
     provide: bool = typer.Option(None, "--provide/--no-provide", help="Whether to provide public service"),
     token: str = typer.Option(None, "--service-token", help="Optional service token required by this node"),
+    allow_agent_tasks: bool = typer.Option(
+        None, "--allow-agent-tasks/--no-allow-agent-tasks", help="Allow this node to serve kind=nanobot.agent"
+    ),
+    auto_delegate: bool = typer.Option(
+        None, "--auto-delegate/--no-auto-delegate", help="Auto-delegate to universe when local run is blocked"
+    ),
 ):
     """Enable public universe mode (opt-in)."""
     cfg = load_config()
@@ -285,6 +291,10 @@ def public_enable(
         cfg.universe.public_provide_service = provide
     if token is not None:
         cfg.universe.public_service_token = token
+    if allow_agent_tasks is not None:
+        cfg.universe.public_allow_agent_tasks = allow_agent_tasks
+    if auto_delegate is not None:
+        cfg.universe.public_auto_delegate_enabled = auto_delegate
     save_config(cfg)
     console.print("[green]✓[/green] Public universe enabled.")
 
@@ -378,6 +388,11 @@ def public_serve(
     node_name = name or cfg.universe.node_name or ""
     price_points = int(price if price is not None else cfg.universe.public_price_points)
     caps = cfg.universe.public_capabilities or {"llm.chat": True}
+    # Advertise nanobot.agent capability only when explicitly allowed.
+    if cfg.universe.public_allow_agent_tasks:
+        caps = {**caps, "nanobot.agent": True}
+    else:
+        caps = {k: v for k, v in caps.items() if k != "nanobot.agent"}
     reg_token = registry_token if registry_token is not None else cfg.universe.public_registry_token
 
     async def _register_loop(endpoint_url: str):

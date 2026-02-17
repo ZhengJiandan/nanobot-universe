@@ -15,8 +15,11 @@ import websockets
 from websockets.server import WebSocketServerProtocol
 
 from nanobot.config.loader import load_config
+from nanobot.agent.tools.registry import ToolRegistry
+from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
 from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.universe.protocol import Envelope, make_envelope
+from nanobot.universe.remote_agent import RemoteAgent, RemoteAgentConfig
 
 
 @dataclass
@@ -76,7 +79,7 @@ class NodeServer:
                     continue
 
                 kind = (env.payload or {}).get("kind", "")
-                if kind not in {"llm.chat", "echo"}:
+                if kind not in {"llm.chat", "echo", "nanobot.agent"}:
                     await ws.send(
                         make_envelope("error", id=env.id, payload={"message": f"unsupported kind: {kind}"}).to_json()
                     )
@@ -90,6 +93,8 @@ class NodeServer:
                 try:
                     if kind == "echo":
                         result = prompt
+                    elif kind == "nanobot.agent":
+                        result = await self._run_remote_agent(prompt)
                     else:
                         result = await self._run_llm_chat(prompt)
                     await ws.send(make_envelope("task_result", id=env.id, payload={"content": result}).to_json())
@@ -122,3 +127,41 @@ class NodeServer:
             temperature=cfg.agents.defaults.temperature,
         )
         return resp.content or ""
+
+    async def _run_remote_agent(self, prompt: str) -> str:
+        cfg = load_config()
+        if not cfg.universe.public_allow_agent_tasks:
+            raise RuntimeError("This node does not allow nanobot.agent tasks.")
+
+        model = cfg.agents.defaults.model
+        provider_cfg, provider_name = cfg._match_provider(model)
+        if not provider_cfg:
+            raise RuntimeError("No provider configured for model. Set providers.*.apiKey in ~/.nanobot/config.json")
+
+        provider = LiteLLMProvider(
+            api_key=provider_cfg.api_key,
+            api_base=provider_cfg.api_base,
+            default_model=model,
+            extra_headers=provider_cfg.extra_headers,
+            provider_name=provider_name,
+        )
+
+        # Build a very restricted toolset for public remote execution.
+        allow = set(cfg.universe.public_agent_tool_allowlist or [])
+        tools = ToolRegistry()
+        if "web_search" in allow:
+            tools.register(WebSearchTool(api_key=cfg.tools.web.search.api_key or None))
+        if "web_fetch" in allow:
+            tools.register(WebFetchTool())
+
+        agent = RemoteAgent(
+            provider=provider,
+            tools=tools,
+            cfg=RemoteAgentConfig(
+                model=model,
+                max_iterations=int(cfg.universe.public_agent_max_iterations or 8),
+                temperature=cfg.agents.defaults.temperature,
+                max_tokens=min(int(cfg.universe.public_max_tokens or 1024), 2048),
+            ),
+        )
+        return await agent.run(prompt)

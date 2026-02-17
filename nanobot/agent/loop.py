@@ -20,6 +20,7 @@ from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.cron import CronTool
+from nanobot.agent.tools.universe import UniverseHelpTool
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.subagent import SubagentManager
 from nanobot.session.manager import Session, SessionManager
@@ -53,8 +54,10 @@ class AgentLoop:
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
         mcp_servers: dict | None = None,
+        universe_config: "UniverseConfig | None" = None,
     ):
         from nanobot.config.schema import ExecToolConfig
+        from nanobot.config.schema import UniverseConfig
         from nanobot.cron.service import CronService
         self.bus = bus
         self.provider = provider
@@ -68,6 +71,7 @@ class AgentLoop:
         self.exec_config = exec_config or ExecToolConfig()
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
+        self.universe_config = universe_config or UniverseConfig()
 
         self.context = ContextBuilder(workspace)
         self.sessions = session_manager or SessionManager(workspace)
@@ -121,6 +125,9 @@ class AgentLoop:
         # Cron tool (for scheduling)
         if self.cron_service:
             self.tools.register(CronTool(self.cron_service))
+
+        # Universe delegation (public network)
+        self.tools.register(UniverseHelpTool())
     
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""
@@ -146,7 +153,7 @@ class AgentLoop:
             if isinstance(cron_tool, CronTool):
                 cron_tool.set_context(channel, chat_id)
 
-    async def _run_agent_loop(self, initial_messages: list[dict]) -> tuple[str | None, list[str]]:
+    async def _run_agent_loop(self, initial_messages: list[dict]) -> tuple[str | None, list[str], list[str]]:
         """
         Run the agent iteration loop.
 
@@ -160,6 +167,7 @@ class AgentLoop:
         iteration = 0
         final_content = None
         tools_used: list[str] = []
+        tool_errors: list[str] = []
 
         while iteration < self.max_iterations:
             iteration += 1
@@ -194,6 +202,10 @@ class AgentLoop:
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.info(f"Tool call: {tool_call.name}({args_str[:200]})")
                     result = await self.tools.execute(tool_call.name, tool_call.arguments)
+                    if isinstance(result, str) and result.startswith("Error:"):
+                        # Keep a small sample for auto-delegation heuristics.
+                        if len(tool_errors) < 3:
+                            tool_errors.append(result[:200])
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
@@ -202,7 +214,7 @@ class AgentLoop:
                 final_content = response.content
                 break
 
-        return final_content, tools_used
+        return final_content, tools_used, tool_errors
 
     async def run(self) -> None:
         """Run the agent loop, processing messages from the bus."""
@@ -297,7 +309,10 @@ class AgentLoop:
             channel=msg.channel,
             chat_id=msg.chat_id,
         )
-        final_content, tools_used = await self._run_agent_loop(initial_messages)
+        final_content, tools_used, tool_errors = await self._run_agent_loop(initial_messages)
+
+        # Auto-delegate to public universe when locally blocked (opt-in).
+        final_content = await self._maybe_delegate_public(msg.content, final_content, tool_errors)
 
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
@@ -345,7 +360,8 @@ class AgentLoop:
             channel=origin_channel,
             chat_id=origin_chat_id,
         )
-        final_content, _ = await self._run_agent_loop(initial_messages)
+        final_content, _, tool_errors = await self._run_agent_loop(initial_messages)
+        final_content = await self._maybe_delegate_public(msg.content, final_content, tool_errors)
 
         if final_content is None:
             final_content = "Background task completed."
@@ -359,6 +375,61 @@ class AgentLoop:
             chat_id=origin_chat_id,
             content=final_content
         )
+
+    async def _maybe_delegate_public(self, user_prompt: str, local_answer: str | None, tool_errors: list[str]) -> str | None:
+        """Optionally auto-delegate to public universe nodes when local run looks blocked.
+
+        This is intentionally conservative and requires explicit opt-in via config.
+        """
+        uc = self.universe_config
+        if not getattr(uc, "public_enabled", False):
+            return local_answer
+        if not getattr(uc, "public_auto_delegate_enabled", False):
+            return local_answer
+
+        # Heuristics: tool errors (missing keys, blocked network, etc.) or explicit "can't" responses.
+        blocked_phrases = (
+            "i can't",
+            "i cannot",
+            "can't access",
+            "unable to",
+            "无法",
+            "不能",
+            "做不到",
+            "Error: BRAVE_API_KEY not configured".lower(),
+        )
+        ans = (local_answer or "").strip()
+        looks_blocked = False
+        if getattr(uc, "public_auto_delegate_on_tool_error", True) and tool_errors:
+            looks_blocked = True
+        if ans:
+            low = ans.lower()
+            if any(p in low for p in blocked_phrases):
+                looks_blocked = True
+
+        if not looks_blocked:
+            return local_answer
+
+        from nanobot.universe.public_client import delegate_task
+
+        # Provide a tiny bit of context; avoid leaking tool traces by default.
+        prompt = user_prompt
+        if tool_errors:
+            prompt = f"{user_prompt}\n\n(Notes: local run hit tool errors: {', '.join(tool_errors)})"
+
+        try:
+            node, out = await delegate_task(
+                registry_url=uc.public_registry_url,
+                kind=getattr(uc, "public_auto_delegate_kind", "nanobot.agent"),
+                prompt=prompt,
+                require_capability=getattr(uc, "public_auto_delegate_kind", "nanobot.agent"),
+                max_price_points=getattr(uc, "public_auto_delegate_max_price_points", None),
+            )
+            return f"[universe:{node.node_id}] {out}"
+        except Exception as e:
+            # If delegation fails, fall back to the local answer.
+            logger.warning(f"public universe auto-delegation failed: {e}")
+            return local_answer
     
     async def _consolidate_memory(self, session, archive_all: bool = False) -> None:
         """Consolidate old messages into MEMORY.md + HISTORY.md.

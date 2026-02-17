@@ -278,6 +278,17 @@ class UniverseConfig(BaseModel):
     public_max_tokens: int = 1024  # hard cap for remote tasks
     public_capabilities: dict[str, Any] = Field(default_factory=lambda: {"llm.chat": True, "echo": True})
 
+    # Public service behavior
+    public_allow_agent_tasks: bool = False  # allow kind="nanobot.agent"
+    public_agent_tool_allowlist: list[str] = Field(default_factory=lambda: ["web_search", "web_fetch"])
+    public_agent_max_iterations: int = 8
+
+    # Client-side auto delegation
+    public_auto_delegate_enabled: bool = False
+    public_auto_delegate_on_tool_error: bool = True
+    public_auto_delegate_kind: str = "nanobot.agent"
+    public_auto_delegate_max_price_points: int | None = None
+
 
 class Config(BaseSettings):
     """Root configuration for nanobot."""
