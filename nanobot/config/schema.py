@@ -1,6 +1,7 @@
 """Configuration schema using Pydantic."""
 
 from pathlib import Path
+from typing import Any
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -233,6 +234,51 @@ class ToolsConfig(BaseModel):
     mcp_servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
 
 
+class UniverseMembership(BaseModel):
+    """A joined Universe network (typically an org hub)."""
+
+    enabled: bool = True
+    org_id: str = ""  # e.g. "acme", "family", "lab"
+    hub_url: str = ""  # e.g. "ws://hub.example.com:18888"
+    join_secret: str = ""  # org join secret / invite token (stored locally)
+    label: str = ""  # optional UI label
+
+
+class UniverseShareProfile(BaseModel):
+    """Local, per-friend sharing policy (what *this* node is willing to share)."""
+
+    share_all: bool = False
+    share_knowledge: bool = False
+    share_skills: bool = False
+    allow_task_help: bool = False
+
+
+class UniverseConfig(BaseModel):
+    """Universe network configuration (org/public hubs)."""
+
+    enabled: bool = False
+    node_id: str = ""  # stable identifier for this nanobot node
+    node_name: str = ""  # optional display name
+
+    # Joined networks (default: org hubs). Public network is also just a membership with its own policy.
+    memberships: list[UniverseMembership] = Field(default_factory=list)
+
+    # Local sharing policy keyed by friend node_id (friendship itself is managed by the hub).
+    share_profiles: dict[str, UniverseShareProfile] = Field(default_factory=dict)
+
+    # Public universe: registry discovery + direct node-to-node calls (opt-in).
+    public_enabled: bool = False
+    public_registry_url: str = "ws://127.0.0.1:18999"
+    public_provide_service: bool = False
+    public_service_host: str = "0.0.0.0"
+    public_service_port: int = 18998
+    public_service_token: str = ""  # optional shared secret required by this node for task calls
+    public_registry_token: str = ""  # optional token required by the registry for registration
+    public_price_points: int = 1  # points awarded per completed task (MVP bookkeeping)
+    public_max_tokens: int = 1024  # hard cap for remote tasks
+    public_capabilities: dict[str, Any] = Field(default_factory=lambda: {"llm.chat": True, "echo": True})
+
+
 class Config(BaseSettings):
     """Root configuration for nanobot."""
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
@@ -240,6 +286,7 @@ class Config(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    universe: UniverseConfig = Field(default_factory=UniverseConfig)
     
     @property
     def workspace_path(self) -> Path:

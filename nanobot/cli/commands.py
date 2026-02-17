@@ -30,6 +30,9 @@ app = typer.Typer(
 console = Console()
 EXIT_COMMANDS = {"exit", "quit", "/exit", "/quit", ":q"}
 
+# Sub-apps
+from nanobot.cli.universe import app as universe_app  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # CLI input: prompt_toolkit for editing, paste, history, and display
 # ---------------------------------------------------------------------------
@@ -537,6 +540,8 @@ def agent(
 
 channels_app = typer.Typer(help="Manage channels")
 app.add_typer(channels_app, name="channels")
+
+app.add_typer(universe_app, name="universe")
 
 
 @channels_app.command("status")
