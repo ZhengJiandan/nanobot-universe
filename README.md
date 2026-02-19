@@ -18,6 +18,22 @@
 
 📏 Real-time line count: **3,668 lines** (run `bash core_agent_lines.sh` to verify anytime)
 
+## 🌌 AI Universe (Highlight)
+
+The **AI Universe** turns zerobot from a personal assistant into a **public, opt-in network** of cooperative nodes.
+
+- **Public Registry**: discover nodes by capability, latency, and price points
+- **Relay for Privacy**: route tasks without exposing node IPs
+- **Auto Register / Unregister**: one command to join or leave the network
+- **Knowledge Packs**: share prompts/skills across nodes, with automatic pull/apply
+
+> This project is based on the open-source **nanobot** project and extends it with the AI Universe stack and other enhancements.
+
+**Compared to nanobot, zerobot adds:**
+- Public registry + relay for privacy-preserving node discovery
+- Capability-based delegation and points-based incentives
+- Knowledge pack sharing and auto-apply workflows
+
 ## 📢 News
 
 - **2026-02-14** 🔌 zerobot now supports MCP! See [MCP section](#mcp-model-context-protocol) for details.
@@ -43,6 +59,8 @@
 ⚡️ **Lightning Fast**: Minimal footprint means faster startup, lower resource usage, and quicker iterations.
 
 💎 **Easy-to-Use**: One-click to deploy and you're ready to go.
+
+🌌 **AI Universe Network**: Opt-in public registry + relay to discover nodes, delegate tasks, and share knowledge packs.
 
 ## 🏗️ Architecture
 
@@ -145,6 +163,13 @@ That's it! You have a working AI assistant in 2 minutes.
 
 zerobot can join a public network where nodes register and help each other with tasks.
 See `docs/AI_UNIVERSE.md` for full protocol and operations.
+
+**One-command join/leave**
+
+```bash
+zerobot universe public register
+zerobot universe public unregister
+```
 
 **Start registry**
 
