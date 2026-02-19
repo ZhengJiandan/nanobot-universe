@@ -22,6 +22,7 @@ from websockets.server import WebSocketServerProtocol
 
 from nanobot.universe.hub_state import HubState, NodeConn, NodeInfo
 from nanobot.universe.protocol import Envelope, make_envelope
+from nanobot.universe.ratelimit import RateLimiter
 
 
 @dataclass
@@ -30,6 +31,11 @@ class HubServerConfig:
     port: int = 18888
     path: str = "/ws"
     hello_timeout_s: float = 10.0
+    rate_limit_per_min: int = 120
+    rate_limit_burst: int = 120
+    max_message_bytes: int = 65536
+    offline_queue_limit: int = 100
+    pending_request_ttl_s: int = 7 * 24 * 3600
 
 
 class HubServer:
@@ -38,6 +44,7 @@ class HubServer:
         self.cfg = cfg or HubServerConfig()
         self.bound_port: int = self.cfg.port
         self._server: websockets.server.Serve | None = None
+        self._limiter = RateLimiter(self.cfg.rate_limit_per_min, self.cfg.rate_limit_burst)
 
     async def start(self) -> None:
         self._server = await websockets.serve(
@@ -67,7 +74,13 @@ class HubServer:
         node_id = None
         try:
             hello_raw = await asyncio.wait_for(ws.recv(), timeout=self.cfg.hello_timeout_s)
+            if self.cfg.max_message_bytes and len(hello_raw) > self.cfg.max_message_bytes:
+                await ws.send(make_envelope("error", payload={"message": "message too large"}).to_json())
+                return
             hello = Envelope.from_json(hello_raw)
+            if not self._allow_client(ws):
+                await ws.send(make_envelope("error", payload={"message": "rate limited"}).to_json())
+                return
             if hello.type != "hello":
                 await ws.send(make_envelope("error", payload={"message": "expected hello"}).to_json())
                 return
@@ -113,10 +126,16 @@ class HubServer:
             await self._broadcast(org_id, self.state.presence_event(org_id, NodeInfo(node_id, node_name, capabilities), True))
 
             async for raw in ws:
+                if self.cfg.max_message_bytes and len(raw) > self.cfg.max_message_bytes:
+                    await ws.send(make_envelope("error", payload={"message": "message too large"}).to_json())
+                    continue
                 try:
                     env = Envelope.from_json(raw)
                 except Exception as e:
                     await ws.send(make_envelope("error", payload={"message": f"bad json: {e}"}).to_json())
+                    continue
+                if not self._allow_client(ws):
+                    await ws.send(make_envelope("error", id=env.id, payload={"message": "rate limited"}).to_json())
                     continue
 
                 await self._handle_message(org_id, node_id, env, ws)
@@ -148,6 +167,8 @@ class HubServer:
     async def _handle_message(self, org_id: str, node_id: str, env: Envelope, ws: WebSocketServerProtocol) -> None:
         org = self.state.get_org(org_id)
         msg_type = env.type
+        async with org.lock:
+            org.cleanup_pending(self.cfg.pending_request_ttl_s)
 
         if msg_type == "ping":
             await ws.send(make_envelope("pong", id=env.id).to_json())
@@ -207,7 +228,7 @@ class HubServer:
                 if target and target.ws:
                     await target.ws.send(deliver.to_json())
                 else:
-                    org.queue_offline(to_node, deliver)
+                    org.queue_offline_limited(to_node, deliver, self.cfg.offline_queue_limit)
 
             await ws.send(make_envelope("friend_request_ok", id=env.id, payload={"requestId": fr.req_id}).to_json())
             return
@@ -250,7 +271,7 @@ class HubServer:
                     if target and target.ws:
                         await target.ws.send(msg.to_json())
                     else:
-                        org.queue_offline(target_id, msg)
+                        org.queue_offline_limited(target_id, msg, self.cfg.offline_queue_limit)
 
             await ws.send(make_envelope("friend_accept_ok", id=env.id, payload={"requestId": request_id}).to_json())
             return
@@ -277,7 +298,7 @@ class HubServer:
                 if target and target.ws:
                     await target.ws.send(deliver.to_json())
                 else:
-                    org.queue_offline(to_node, deliver)
+                    org.queue_offline_limited(to_node, deliver, self.cfg.offline_queue_limit)
 
             await ws.send(make_envelope("dm_ok", id=env.id).to_json())
             return
@@ -299,3 +320,12 @@ class HubServer:
             await ws.send(payload)
         except Exception:
             return
+
+    def _allow_client(self, ws: WebSocketServerProtocol) -> bool:
+        key = "unknown"
+        try:
+            if ws.remote_address and ws.remote_address[0]:
+                key = str(ws.remote_address[0])
+        except Exception:
+            pass
+        return self._limiter.allow(key)

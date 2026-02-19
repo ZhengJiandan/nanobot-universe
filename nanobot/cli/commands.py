@@ -6,6 +6,7 @@ import signal
 from pathlib import Path
 import select
 import sys
+from uuid import uuid4
 
 import typer
 from rich.console import Console
@@ -178,7 +179,8 @@ def onboard():
             save_config(config)
             console.print(f"[green]✓[/green] Config refreshed at {config_path} (existing values preserved)")
     else:
-        save_config(Config())
+        config = Config()
+        save_config(config)
         console.print(f"[green]✓[/green] Created config at {config_path}")
     
     # Create workspace
@@ -190,6 +192,37 @@ def onboard():
     
     # Create default bootstrap files
     _create_workspace_templates(workspace)
+
+    # Optional public universe setup
+    try:
+        join_public = typer.confirm("Join public universe now?", default=False)
+    except Exception:
+        join_public = False
+
+    if join_public:
+        if not config.universe.node_id:
+            config.universe.node_id = str(uuid4())
+        config.universe.public_enabled = True
+        config.universe.public_provide_service = True
+        config.universe.public_auto_register = True
+        config.universe.public_detect_public_ip = True
+
+        try:
+            allow_agent_tasks = typer.confirm("Allow this node to run nanobot.agent tasks for others?", default=False)
+        except Exception:
+            allow_agent_tasks = False
+        config.universe.public_allow_agent_tasks = allow_agent_tasks
+
+        try:
+            enable_auto_delegate = typer.confirm("Enable auto-delegate when local run is blocked?", default=False)
+        except Exception:
+            enable_auto_delegate = False
+        config.universe.public_auto_delegate_enabled = enable_auto_delegate
+
+        save_config(config)
+        console.print("[green]✓[/green] Public universe enabled and auto-register configured")
+    else:
+        console.print("[dim]Public universe not enabled. You can turn it on later with `nanobot universe public enable`.[/dim]")
     
     console.print(f"\n{__logo__} nanobot is ready!")
     console.print("\nNext steps:")

@@ -283,6 +283,39 @@ class UniverseConfig(BaseModel):
     public_advertise_port: int | None = None  # optional override for advertise port
     public_detect_public_ip: bool = False  # if true, use external IP detection
     public_detect_ip_service: str = "https://api.ipify.org"
+    public_rate_limit_per_min: int = 60  # per client IP
+    public_rate_limit_burst: int = 60
+    public_rate_limit_per_min_by_node: int = 60  # per client nodeId (if provided)
+    public_rate_limit_burst_by_node: int = 60
+    public_self_check_enabled: bool = True
+    public_self_check_timeout_s: float = 3.0
+    public_capability_card: dict[str, Any] = Field(default_factory=dict)
+    public_tools: list[str] = Field(default_factory=list)
+    public_models: list[str] = Field(default_factory=list)
+    public_languages: list[str] = Field(default_factory=list)
+    public_relay_url: str = ""  # ws://relay-host:port
+    public_relay_token: str = ""
+    public_relay_only: bool = False
+    public_preauth_enabled: bool = True
+    public_preauth_required: bool = False
+    public_capability_vocab: list[str] = Field(
+        default_factory=lambda: ["web_search", "web_fetch", "exec", "nanobot.agent", "llm.chat"]
+    )
+    public_capability_aliases: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "web_search": ["search", "lookup", "web_search", "搜", "搜索", "查", "查询", "最新", "新闻"],
+            "web_fetch": ["fetch", "web_fetch", "抓取", "网页", "url", "http", "https"],
+            "exec": ["exec", "shell", "bash", "cmd", "命令", "运行", "执行", "脚本"],
+        }
+    )
+    public_capability_llm_enabled: bool = True
+    public_knowledge_auto_pull: bool = False
+    public_knowledge_auto_pull_limit: int = 1
+    public_knowledge_auto_pull_tagged_only: bool = True
+    public_knowledge_inbox_dir: str = ""
+    public_knowledge_auto_publish: bool = False
+    public_knowledge_publish_dir: str = "~/.nanobot/knowledge_packs"
+    public_knowledge_publish_interval_s: int = 300
 
     # Public service behavior
     public_allow_agent_tasks: bool = False  # allow kind="nanobot.agent"
@@ -294,6 +327,7 @@ class UniverseConfig(BaseModel):
     public_auto_delegate_on_tool_error: bool = True
     public_auto_delegate_kind: str = "nanobot.agent"
     public_auto_delegate_max_price_points: int | None = None
+    public_auto_delegate_debug: bool = False
 
 
 class Config(BaseSettings):

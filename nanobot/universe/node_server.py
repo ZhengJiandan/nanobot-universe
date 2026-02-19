@@ -1,6 +1,6 @@
 """Public Universe Node service (direct task execution endpoint).
 
-MVP only supports `llm.chat` tasks and does not allow tool usage.
+MVP supports `llm.chat`, `echo`, and (optionally) `nanobot.agent` tasks.
 """
 
 from __future__ import annotations
@@ -14,12 +14,9 @@ from loguru import logger
 import websockets
 from websockets.server import WebSocketServerProtocol
 
-from nanobot.config.loader import load_config
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.web import WebFetchTool, WebSearchTool
-from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.universe.protocol import Envelope, make_envelope
-from nanobot.universe.remote_agent import RemoteAgent, RemoteAgentConfig
+from nanobot.universe.ratelimit import RateLimiter
+from nanobot.universe.task_executor import TaskExecutor
 
 
 @dataclass
@@ -27,6 +24,10 @@ class NodeServerConfig:
     host: str = "0.0.0.0"
     port: int = 18998
     service_token: str = ""  # if set, required for task_run
+    rate_limit_per_min: int = 60
+    rate_limit_burst: int = 60
+    rate_limit_per_min_by_node: int = 60
+    rate_limit_burst_by_node: int = 60
 
 
 class NodeServer:
@@ -34,6 +35,9 @@ class NodeServer:
         self.cfg = cfg or NodeServerConfig()
         self.bound_port: int = self.cfg.port
         self._server: websockets.server.Serve | None = None
+        self._limiter = RateLimiter(self.cfg.rate_limit_per_min, self.cfg.rate_limit_burst)
+        self._node_limiter = RateLimiter(self.cfg.rate_limit_per_min_by_node, self.cfg.rate_limit_burst_by_node)
+        self._executor = TaskExecutor()
 
     async def start(self) -> None:
         self._server = await websockets.serve(self._handler, self.cfg.host, self.cfg.port, ping_interval=20, ping_timeout=20)
@@ -65,6 +69,10 @@ class NodeServer:
                     await ws.send(make_envelope("error", payload={"message": f"bad json: {e}"}).to_json())
                     continue
 
+                if not self._allow_client(ws, env):
+                    await ws.send(make_envelope("error", id=env.id, payload={"message": "rate limited"}).to_json())
+                    continue
+
                 if env.type == "ping":
                     await ws.send(make_envelope("pong", id=env.id).to_json())
                     continue
@@ -91,77 +99,36 @@ class NodeServer:
                     continue
 
                 try:
-                    if kind == "echo":
-                        result = prompt
-                    elif kind == "nanobot.agent":
-                        result = await self._run_remote_agent(prompt)
-                    else:
-                        result = await self._run_llm_chat(prompt)
+                    result = await self._executor.run(kind, prompt)
                     await ws.send(make_envelope("task_result", id=env.id, payload={"content": result}).to_json())
                 except Exception as e:
                     await ws.send(make_envelope("task_error", id=env.id, payload={"message": str(e)}).to_json())
         except websockets.ConnectionClosed:
             return
 
+    def _allow_client(self, ws: WebSocketServerProtocol, env: Envelope) -> bool:
+        key = "unknown"
+        try:
+            if ws.remote_address and ws.remote_address[0]:
+                key = str(ws.remote_address[0])
+        except Exception:
+            pass
+        if not self._limiter.allow(key):
+            return False
+        client_id = None
+        try:
+            if env.payload and isinstance(env.payload, dict):
+                client_id = env.payload.get("clientId") or env.payload.get("client_id")
+        except Exception:
+            client_id = None
+        if client_id:
+            return self._node_limiter.allow(str(client_id))
+        return True
+
     async def _run_llm_chat(self, prompt: str) -> str:
-        cfg = load_config()
-        model = cfg.agents.defaults.model
-        provider_cfg, provider_name = cfg._match_provider(model)
-        if not provider_cfg:
-            raise RuntimeError("No provider configured for model. Set providers.*.apiKey in ~/.nanobot/config.json")
-
-        provider = LiteLLMProvider(
-            api_key=provider_cfg.api_key,
-            api_base=provider_cfg.api_base,
-            default_model=model,
-            extra_headers=provider_cfg.extra_headers,
-            provider_name=provider_name,
-        )
-
-        max_tokens = min(int(getattr(cfg.universe, "public_max_tokens", 1024) or 1024), 2048)
-        resp = await provider.chat(
-            messages=[{"role": "user", "content": prompt}],
-            tools=None,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=cfg.agents.defaults.temperature,
-        )
-        return resp.content or ""
+        # Deprecated: kept for compatibility with older imports.
+        return await self._executor.run("llm.chat", prompt)
 
     async def _run_remote_agent(self, prompt: str) -> str:
-        cfg = load_config()
-        if not cfg.universe.public_allow_agent_tasks:
-            raise RuntimeError("This node does not allow nanobot.agent tasks.")
-
-        model = cfg.agents.defaults.model
-        provider_cfg, provider_name = cfg._match_provider(model)
-        if not provider_cfg:
-            raise RuntimeError("No provider configured for model. Set providers.*.apiKey in ~/.nanobot/config.json")
-
-        provider = LiteLLMProvider(
-            api_key=provider_cfg.api_key,
-            api_base=provider_cfg.api_base,
-            default_model=model,
-            extra_headers=provider_cfg.extra_headers,
-            provider_name=provider_name,
-        )
-
-        # Build a very restricted toolset for public remote execution.
-        allow = set(cfg.universe.public_agent_tool_allowlist or [])
-        tools = ToolRegistry()
-        if "web_search" in allow:
-            tools.register(WebSearchTool(api_key=cfg.tools.web.search.api_key or None))
-        if "web_fetch" in allow:
-            tools.register(WebFetchTool())
-
-        agent = RemoteAgent(
-            provider=provider,
-            tools=tools,
-            cfg=RemoteAgentConfig(
-                model=model,
-                max_iterations=int(cfg.universe.public_agent_max_iterations or 8),
-                temperature=cfg.agents.defaults.temperature,
-                max_tokens=min(int(cfg.universe.public_max_tokens or 1024), 2048),
-            ),
-        )
-        return await agent.run(prompt)
+        # Deprecated: kept for compatibility with older imports.
+        return await self._executor.run("nanobot.agent", prompt)

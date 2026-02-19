@@ -55,6 +55,8 @@ dev = [
 nanobot = "nanobot.cli.commands:app"
 nanobot-universe-hub = "nanobot.universe.hub_cli:app"
 nanobot-universe-registry = "nanobot.universe.registry_cli:app"
+nanobot-universe-registry-bridge = "nanobot.universe.registry_bridge_cli:app"
+nanobot-universe-relay = "nanobot.universe.relay_cli:app"
 
 [build-system]
 requires = ["hatchling"]

@@ -382,6 +382,7 @@ class AgentLoop:
         This is intentionally conservative and requires explicit opt-in via config.
         """
         uc = self.universe_config
+        debug = getattr(uc, "public_auto_delegate_debug", False)
         if not getattr(uc, "public_enabled", False):
             return local_answer
         if not getattr(uc, "public_auto_delegate_enabled", False):
@@ -412,24 +413,199 @@ class AgentLoop:
 
         from nanobot.universe.public_client import delegate_task
 
+        required_caps = await self._infer_required_caps_async(user_prompt, local_answer, tool_errors)
+
         # Provide a tiny bit of context; avoid leaking tool traces by default.
         prompt = user_prompt
         if tool_errors:
             prompt = f"{user_prompt}\n\n(Notes: local run hit tool errors: {', '.join(tool_errors)})"
 
+        last_err: Exception | None = None
+        for cap in required_caps:
+            try:
+                node, out = await delegate_task(
+                    registry_url=uc.public_registry_url,
+                    kind=getattr(uc, "public_auto_delegate_kind", "nanobot.agent"),
+                    prompt=prompt,
+                    require_capability=cap,
+                    max_price_points=getattr(uc, "public_auto_delegate_max_price_points", None),
+                    client_id=uc.node_id or None,
+                    registry_token=uc.public_registry_token or None,
+                    relay_url=getattr(uc, "public_relay_url", "") or None,
+                    relay_token=getattr(uc, "public_relay_token", "") or "",
+                    relay_only=bool(getattr(uc, "public_relay_only", False)),
+                    preauth_enabled=bool(getattr(uc, "public_preauth_enabled", True)),
+                    preauth_required=bool(getattr(uc, "public_preauth_required", False)),
+                )
+                if getattr(uc, "public_knowledge_auto_pull", False):
+                    asyncio.create_task(self._auto_pull_knowledge(node.node_id, cap))
+                if debug:
+                    return f"[universe-debug] delegated to {node.node_id} (cap={cap})\n[universe:{node.node_id}] {out}"
+                return f"[universe:{node.node_id}] {out}"
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                if "no eligible nodes" in msg or "no online nodes" in msg or "node not found" in msg:
+                    continue
+                # Other errors: continue to next capability as a fallback.
+                continue
+
+        # If delegation fails, fall back to the local answer.
+        if last_err:
+            logger.warning(f"public universe auto-delegation failed: {last_err}")
+            if debug:
+                prefix = f"[universe-debug] delegation failed: {last_err}"
+                if local_answer:
+                    return f"{prefix}\n{local_answer}"
+                return prefix
+        return local_answer
+
+    def _infer_required_caps(self, user_prompt: str, local_answer: str | None, tool_errors: list[str]) -> list[str]:
+        caps: list[str] = []
+        text = f"{user_prompt}\n{local_answer or ''}".lower()
+
+        def add(cap: str) -> None:
+            if cap and cap not in caps:
+                caps.append(cap)
+
+        for err in tool_errors:
+            low = err.lower()
+            if "brave_api_key" in low or "web_search" in low:
+                add("web_search")
+            if "web_fetch" in low or "http" in low or "fetch" in low:
+                add("web_fetch")
+            if "exec" in low or "shell" in low or "permission" in low:
+                add("exec")
+
+        if any(k in text for k in ("search", "lookup", "latest", "news", "查", "搜", "搜索", "最新", "新闻")):
+            add("web_search")
+        if any(k in text for k in ("http://", "https://", "url", "网页", "抓取", "fetch")):
+            add("web_fetch")
+        if any(k in text for k in ("运行", "执行", "命令", "shell", "bash", "python", "cmd")):
+            add("exec")
+
+        return caps
+
+    async def _infer_required_caps_async(
+        self, user_prompt: str, local_answer: str | None, tool_errors: list[str]
+    ) -> list[str]:
+        uc = self.universe_config
+        vocab = [str(x).strip() for x in (uc.public_capability_vocab or []) if str(x).strip()]
+        aliases = uc.public_capability_aliases or {}
+        rule_caps = self._infer_required_caps(user_prompt, local_answer, tool_errors)
+        caps = self._normalize_caps(rule_caps, vocab, aliases)
+
+        if not caps and getattr(uc, "public_capability_llm_enabled", True):
+            llm_caps = await self._llm_infer_caps(user_prompt, local_answer, tool_errors, vocab)
+            caps = self._normalize_caps(llm_caps, vocab, aliases)
+
+        default_kind = getattr(uc, "public_auto_delegate_kind", "nanobot.agent")
+        if default_kind and default_kind not in caps:
+            caps.append(default_kind)
+        return caps
+
+    def _normalize_caps(self, caps: list[str], vocab: list[str], aliases: dict[str, list[str]]) -> list[str]:
+        if not caps:
+            return []
+        vocab_set = {v.lower() for v in vocab} if vocab else set()
+        alias_map: dict[str, str] = {}
+        for canon, items in (aliases or {}).items():
+            canon_key = str(canon).strip()
+            if not canon_key:
+                continue
+            alias_map[canon_key.lower()] = canon_key
+            for item in items or []:
+                if isinstance(item, str) and item.strip():
+                    alias_map[item.strip().lower()] = canon_key
+        out: list[str] = []
+        for cap in caps:
+            if not cap:
+                continue
+            key = str(cap).strip()
+            if not key:
+                continue
+            low = key.lower()
+            canon = None
+            if low in alias_map:
+                canon = alias_map[low]
+            elif not vocab_set or low in vocab_set:
+                canon = key
+            if not canon:
+                continue
+            if vocab_set and canon.lower() not in vocab_set:
+                continue
+            if canon not in out:
+                out.append(canon)
+        return out
+
+    async def _llm_infer_caps(
+        self,
+        user_prompt: str,
+        local_answer: str | None,
+        tool_errors: list[str],
+        vocab: list[str],
+    ) -> list[str]:
+        if not vocab:
+            return []
         try:
-            node, out = await delegate_task(
-                registry_url=uc.public_registry_url,
-                kind=getattr(uc, "public_auto_delegate_kind", "nanobot.agent"),
-                prompt=prompt,
-                require_capability=getattr(uc, "public_auto_delegate_kind", "nanobot.agent"),
-                max_price_points=getattr(uc, "public_auto_delegate_max_price_points", None),
+            prompt = (
+                "You are a capability classifier. Pick up to 3 items from the given list that best match\n"
+                "the user's request. Only output a JSON array of strings from the list.\n\n"
+                f"CAPABILITIES: {', '.join(vocab)}\n\n"
+                f"USER_REQUEST:\n{user_prompt}\n\n"
+                f"LOCAL_RESPONSE:\n{local_answer or ''}\n\n"
+                f"TOOL_ERRORS:\n{'; '.join(tool_errors)}\n"
             )
-            return f"[universe:{node.node_id}] {out}"
+            resp = await self.provider.chat(
+                messages=[{"role": "user", "content": prompt}],
+                tools=None,
+                model=self.model,
+                temperature=0.0,
+                max_tokens=128,
+            )
+            content = (resp.content or "").strip()
+            data = json_repair.loads(content)
+            if isinstance(data, list):
+                return [str(x) for x in data if isinstance(x, str)]
+        except Exception:
+            return []
+        return []
+
+    async def _auto_pull_knowledge(self, provider_node: str, cap: str | None) -> None:
+        uc = self.universe_config
+        token = uc.public_registry_token or None
+        try:
+            from nanobot.universe.public_client import knowledge_list, knowledge_get
+            from nanobot.universe.knowledge_store import save_pack
+
+            limit = max(1, int(getattr(uc, "public_knowledge_auto_pull_limit", 1) or 1))
+            tagged_only = bool(getattr(uc, "public_knowledge_auto_pull_tagged_only", True))
+            inbox_dir = getattr(uc, "public_knowledge_inbox_dir", "") or None
+
+            packs = await knowledge_list(
+                registry_url=uc.public_registry_url,
+                registry_token=token,
+                owner_node=provider_node,
+                tag=cap if tagged_only and cap else None,
+                limit=limit,
+            )
+            if not packs and tagged_only:
+                packs = await knowledge_list(
+                    registry_url=uc.public_registry_url,
+                    registry_token=token,
+                    owner_node=provider_node,
+                    tag=None,
+                    limit=limit,
+                )
+            for meta in packs[:limit]:
+                pack = await knowledge_get(
+                    registry_url=uc.public_registry_url,
+                    registry_token=token,
+                    pack_id=meta.pack_id,
+                )
+                save_pack(pack, inbox_dir=inbox_dir)
         except Exception as e:
-            # If delegation fails, fall back to the local answer.
-            logger.warning(f"public universe auto-delegation failed: {e}")
-            return local_answer
+            logger.warning(f"auto knowledge pull failed: {e}")
     
     async def _consolidate_memory(self, session, archive_all: bool = False) -> None:
         """Consolidate old messages into MEMORY.md + HISTORY.md.

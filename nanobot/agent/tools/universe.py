@@ -51,8 +51,14 @@ class UniverseHelpTool(Tool):
                 to_node_id=toNodeId,
                 service_token=serviceToken,
                 max_price_points=maxPricePoints,
+                client_id=cfg.universe.node_id or None,
+                registry_token=cfg.universe.public_registry_token or None,
+                relay_url=cfg.universe.public_relay_url or None,
+                relay_token=cfg.universe.public_relay_token or "",
+                relay_only=bool(cfg.universe.public_relay_only),
+                preauth_enabled=bool(cfg.universe.public_preauth_enabled),
+                preauth_required=bool(cfg.universe.public_preauth_required),
             )
             return f"[universe:{node.node_id}] {out}"
         except Exception as e:
             return f"Error: universe delegation failed: {e}"
-

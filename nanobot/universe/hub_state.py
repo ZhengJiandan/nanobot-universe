@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -15,6 +16,7 @@ class FriendRequest:
     from_node: str
     to_node: str
     message: str = ""
+    created_ts: float = 0.0
 
 
 @dataclass
@@ -51,16 +53,38 @@ class OrgState:
         self.friends[b].add(a)
 
     def queue_offline(self, node_id: str, msg: Envelope) -> None:
-        self.offline_queue.setdefault(node_id, []).append(msg)
+        self.queue_offline_limited(node_id, msg, limit=None)
+
+    def queue_offline_limited(self, node_id: str, msg: Envelope, limit: int | None) -> None:
+        queue = self.offline_queue.setdefault(node_id, [])
+        if limit and limit > 0:
+            while len(queue) >= limit:
+                queue.pop(0)
+        queue.append(msg)
 
     def pop_offline(self, node_id: str) -> list[Envelope]:
         return self.offline_queue.pop(node_id, [])
 
     def new_friend_request(self, org_id: str, from_node: str, to_node: str, message: str) -> FriendRequest:
         req_id = str(uuid4())
-        fr = FriendRequest(req_id=req_id, org_id=org_id, from_node=from_node, to_node=to_node, message=message)
+        fr = FriendRequest(
+            req_id=req_id,
+            org_id=org_id,
+            from_node=from_node,
+            to_node=to_node,
+            message=message,
+            created_ts=time.time(),
+        )
         self.pending_requests[req_id] = fr
         return fr
+
+    def cleanup_pending(self, ttl_s: int) -> None:
+        if ttl_s <= 0:
+            return
+        cutoff = time.time() - float(ttl_s)
+        for req_id, fr in list(self.pending_requests.items()):
+            if fr.created_ts and fr.created_ts < cutoff:
+                self.pending_requests.pop(req_id, None)
 
 
 class HubState:
@@ -91,4 +115,3 @@ class HubState:
                 "capabilities": node.capabilities,
             },
         )
-

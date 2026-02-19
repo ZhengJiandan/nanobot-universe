@@ -268,6 +268,9 @@ def listen(org: str = typer.Option(None, "--org", help="Org ID (if multiple memb
 public_app = typer.Typer(help="Public universe: opt-in registry discovery + direct task calls")
 app.add_typer(public_app, name="public")
 
+knowledge_app = typer.Typer(help="Public knowledge packs (free sharing)")
+public_app.add_typer(knowledge_app, name="knowledge")
+
 
 @public_app.command("enable")
 def public_enable(
@@ -279,6 +282,9 @@ def public_enable(
     ),
     auto_delegate: bool = typer.Option(
         None, "--auto-delegate/--no-auto-delegate", help="Auto-delegate to universe when local run is blocked"
+    ),
+    auto_delegate_debug: bool = typer.Option(
+        None, "--auto-delegate-debug/--no-auto-delegate-debug", help="Show debug info when auto-delegating"
     ),
     auto_register: bool = typer.Option(
         None, "--auto-register/--no-auto-register", help="Auto-register to registry at startup"
@@ -295,6 +301,11 @@ def public_enable(
     detect_public_ip: bool = typer.Option(
         None, "--detect-public-ip/--no-detect-public-ip", help="Detect public IP for advertise URL"
     ),
+    relay_url: str = typer.Option(None, "--relay-url", help="Relay URL, e.g. ws://relay-host:19001"),
+    relay_token: str = typer.Option(None, "--relay-token", help="Relay token (if required)"),
+    relay_only: bool = typer.Option(
+        None, "--relay-only/--no-relay-only", help="Use relay only (disable direct endpoint exposure)"
+    ),
 ):
     """Enable public universe mode (opt-in)."""
     cfg = load_config()
@@ -310,6 +321,8 @@ def public_enable(
         cfg.universe.public_allow_agent_tasks = allow_agent_tasks
     if auto_delegate is not None:
         cfg.universe.public_auto_delegate_enabled = auto_delegate
+    if auto_delegate_debug is not None:
+        cfg.universe.public_auto_delegate_debug = auto_delegate_debug
     if auto_register is not None:
         cfg.universe.public_auto_register = auto_register
     if advertise_url is not None:
@@ -320,6 +333,12 @@ def public_enable(
         cfg.universe.public_advertise_port = advertise_port
     if detect_public_ip is not None:
         cfg.universe.public_detect_public_ip = detect_public_ip
+    if relay_url is not None:
+        cfg.universe.public_relay_url = relay_url
+    if relay_token is not None:
+        cfg.universe.public_relay_token = relay_token
+    if relay_only is not None:
+        cfg.universe.public_relay_only = relay_only
     save_config(cfg)
     console.print("[green]✓[/green] Public universe enabled.")
 
@@ -339,17 +358,25 @@ def public_list(
     registry: str = typer.Option(None, "--registry", help="Registry URL override"),
     require_cap: str = typer.Option("llm.chat", "--require-cap", help="Required capability key"),
     all: bool = typer.Option(False, "--all", help="Include offline nodes"),
+    show_card: bool = typer.Option(False, "--show-card", help="Show capabilityCard details"),
 ):
     """List nodes in the public registry."""
     from nanobot.universe.protocol import Envelope, make_envelope
     import websockets
+    import json
 
     cfg = load_config()
     reg = registry or cfg.universe.public_registry_url
 
     async def _run():
         async with websockets.connect(reg) as ws:
-            req = make_envelope("list", payload={"onlineOnly": not all, "requireCapabilities": [require_cap] if require_cap else []})
+            req = make_envelope(
+                "list",
+                payload={
+                    "onlineOnly": not all,
+                    "requireCapabilities": [require_cap] if require_cap else [],
+                },
+            )
             await ws.send(req.to_json())
             # ack + result
             while True:
@@ -364,7 +391,6 @@ def public_list(
     table = Table(title=f"Public Nodes (registry={reg})")
     table.add_column("Node ID", style="cyan")
     table.add_column("Name")
-    table.add_column("Endpoint")
     table.add_column("Price")
     table.add_column("Done")
     table.add_column("Points")
@@ -372,10 +398,285 @@ def public_list(
         table.add_row(
             n.get("nodeId", ""),
             n.get("nodeName", ""),
-            n.get("endpointUrl", ""),
             str(n.get("pricePoints", "")),
             str(n.get("completedTasks", "")),
             str(n.get("earnedPoints", "")),
+        )
+    console.print(table)
+    if show_card:
+        for n in (env.payload or {}).get("nodes", []):
+            node_id = n.get("nodeId", "")
+            card = dict(n.get("capabilityCard", {}) or {})
+            # Redact any endpoint URL to avoid leaking IPs in CLI output.
+            card.pop("endpointUrl", None)
+            if not card:
+                continue
+            console.print(f"[bold]capabilityCard[/bold] {node_id}")
+            console.print(json.dumps(card, ensure_ascii=False, indent=2))
+
+
+@knowledge_app.command("list")
+def knowledge_list(
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    kind: str = typer.Option(None, "--kind", help="Filter by kind"),
+    tag: str = typer.Option(None, "--tag", help="Filter by tag"),
+    owner: str = typer.Option(None, "--owner", help="Filter by owner node_id"),
+    limit: int = typer.Option(50, "--limit", help="Max entries"),
+):
+    """List public knowledge packs (free)."""
+    from nanobot.universe.public_client import knowledge_list as _knowledge_list
+
+    cfg = load_config()
+    reg = registry or cfg.universe.public_registry_url
+    token = cfg.universe.public_registry_token or None
+
+    async def _run():
+        return await _knowledge_list(
+            registry_url=reg,
+            registry_token=token,
+            kind=kind,
+            tag=tag,
+            owner_node=owner,
+            limit=limit,
+        )
+
+    packs = asyncio.run(_run())
+    table = Table(title=f"Knowledge Packs (registry={reg})")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Kind")
+    table.add_column("Version")
+    table.add_column("Size")
+    table.add_column("Owner")
+    table.add_column("Tags")
+    for p in packs:
+        table.add_row(
+            p.pack_id,
+            p.name,
+            p.kind,
+            p.version,
+            str(p.size_bytes),
+            p.owner_node,
+            ",".join(p.tags or []),
+        )
+    console.print(table)
+
+
+@knowledge_app.command("publish")
+def knowledge_publish(
+    file: str = typer.Option(None, "--file", help="JSON file with knowledge pack"),
+    name: str = typer.Option(None, "--name", help="Pack name"),
+    kind: str = typer.Option(None, "--kind", help="Pack kind (prompt|skill|workflow)"),
+    content: str = typer.Option(None, "--content", help="Pack content (string)"),
+    summary: str = typer.Option("", "--summary", help="Short summary"),
+    tag: list[str] = typer.Option(None, "--tag", help="Tag (repeatable)"),
+    version: str = typer.Option("1.0", "--version", help="Version"),
+    pack_id: str = typer.Option(None, "--id", help="Optional pack ID"),
+    allow_update: bool = typer.Option(False, "--allow-update", help="Allow update if ID exists"),
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
+):
+    """Publish a knowledge pack (free, no points)."""
+    import json as _json
+    from pathlib import Path
+    from nanobot.universe.public_client import knowledge_publish as _knowledge_publish
+
+    cfg = load_config()
+    node_id = _ensure_node_id()
+    reg = registry or cfg.universe.public_registry_url
+    token = registry_token or cfg.universe.public_registry_token or ""
+
+    payload: dict = {}
+    if file:
+        path = Path(file).expanduser()
+        if not path.exists():
+            console.print(f"[red]File not found:[/red] {path}")
+            raise typer.Exit(1)
+        payload = _json.loads(path.read_text())
+
+    name = name or payload.get("name")
+    kind = kind or payload.get("kind")
+    content = content or payload.get("content")
+    summary = summary or payload.get("summary", "")
+    version = version or payload.get("version", "1.0")
+    tags = tag or payload.get("tags", []) or []
+    pack_id = pack_id or payload.get("id")
+
+    if not name or not kind or not content:
+        console.print("[red]Missing required fields: name/kind/content[/red]")
+        raise typer.Exit(1)
+
+    async def _run():
+        return await _knowledge_publish(
+            registry_url=reg,
+            registry_token=token,
+            name=name,
+            kind=kind,
+            content=content,
+            summary=summary,
+            tags=tags,
+            version=version,
+            pack_id=pack_id,
+            owner_node=node_id,
+            allow_update=allow_update,
+        )
+
+    resp = asyncio.run(_run())
+    console.print(f"[green]✓[/green] Published knowledge pack: {resp.get('id')}")
+    console.print(f"sizeBytes={resp.get('sizeBytes')} hash={resp.get('contentHash')}")
+
+
+@knowledge_app.command("fetch")
+def knowledge_fetch(
+    pack_id: str = typer.Option(..., "--id", help="Knowledge pack ID"),
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
+    save_dir: str = typer.Option(None, "--save-dir", help="Save directory (default: ~/.nanobot/universe_inbox)"),
+):
+    """Fetch a knowledge pack into local inbox (no auto-exec)."""
+    from nanobot.universe.public_client import knowledge_get as _knowledge_get
+    from nanobot.universe.knowledge_store import save_pack
+
+    cfg = load_config()
+    reg = registry or cfg.universe.public_registry_url
+    token = registry_token or cfg.universe.public_registry_token or None
+    inbox_dir = save_dir or (cfg.universe.public_knowledge_inbox_dir or None)
+
+    async def _run():
+        return await _knowledge_get(
+            registry_url=reg,
+            pack_id=pack_id,
+            registry_token=token,
+        )
+
+    pack = asyncio.run(_run())
+    path = save_pack(pack, inbox_dir=inbox_dir)
+    console.print(f"[green]✓[/green] Saved to {path}")
+    console.print("[dim]Review this pack before enabling or copying into skills/prompts.[/dim]")
+
+
+@knowledge_app.command("apply")
+def knowledge_apply(
+    pack_id: str = typer.Option(..., "--id", help="Knowledge pack ID"),
+    name: str = typer.Option(None, "--name", help="Override local skill name"),
+    always: bool = typer.Option(True, "--always/--no-always", help="Mark skill as always loaded"),
+    inbox_dir: str = typer.Option(None, "--inbox-dir", help="Inbox dir override"),
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing skill"),
+):
+    """Apply a knowledge pack as a local skill (safe; no auto-exec)."""
+    from nanobot.universe.public_client import knowledge_get as _knowledge_get
+    from nanobot.universe.knowledge_store import find_pack_in_inbox, save_pack
+    from nanobot.utils.helpers import safe_filename
+
+    cfg = load_config()
+    reg = registry or cfg.universe.public_registry_url
+    token = registry_token or cfg.universe.public_registry_token or None
+    effective_inbox = inbox_dir or (cfg.universe.public_knowledge_inbox_dir or None)
+
+    pack = None
+    try:
+        pack = find_pack_in_inbox(pack_id, inbox_dir=effective_inbox)
+    except Exception:
+        pack = None
+
+    if not pack:
+        async def _run():
+            return await _knowledge_get(registry_url=reg, pack_id=pack_id, registry_token=token)
+
+        try:
+            pack = asyncio.run(_run())
+            save_pack(pack, inbox_dir=effective_inbox)
+        except Exception as e:
+            console.print(f"[red]Failed to load pack {pack_id}: {e}[/red]")
+            raise typer.Exit(code=1)
+
+    if not pack:
+        console.print(f"[red]Pack not found: {pack_id}[/red]")
+        raise typer.Exit(code=1)
+
+    workspace = cfg.workspace_path()
+    skills_dir = workspace / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    skill_name = safe_filename(name or pack.name or f"knowledge_{pack.pack_id[:8]}")
+    if not skill_name:
+        skill_name = f"knowledge_{pack.pack_id[:8]}"
+    skill_dir = skills_dir / skill_name
+    skill_file = skill_dir / "SKILL.md"
+
+    if skill_file.exists() and not overwrite:
+        console.print(f"[red]Skill already exists: {skill_dir} (use --overwrite)[/red]")
+        raise typer.Exit(code=1)
+    skill_dir.mkdir(parents=True, exist_ok=True)
+
+    desc = pack.summary or pack.name or "Knowledge pack"
+    desc = desc.replace('"', '\\"')
+    tags = ",".join(pack.tags or [])
+    frontmatter = [
+        "---",
+        f"description: \"{desc}\"",
+        f"source: \"public_universe\"",
+        f"pack_id: \"{pack.pack_id}\"",
+        f"kind: \"{pack.kind}\"",
+        f"owner: \"{pack.owner_node}\"",
+        f"version: \"{pack.version}\"",
+        f"content_hash: \"{pack.content_hash}\"",
+        f"size_bytes: \"{pack.size_bytes}\"",
+        f"tags: \"{tags}\"",
+        f"always: \"{str(always).lower()}\"",
+        "---",
+        "",
+    ]
+    body = pack.content.strip() + "\n"
+    skill_file.write_text("\n".join(frontmatter) + body, encoding="utf-8")
+
+    console.print(f"[green]✓[/green] Applied pack as skill: {skill_dir}")
+    console.print("[dim]Restart nanobot agent or start a new session to load the new skill.[/dim]")
+
+
+@public_app.command("leaderboard")
+def public_leaderboard(
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    limit: int = typer.Option(20, "--limit", help="Max entries"),
+    sort_by: str = typer.Option("earnedPoints", "--sort-by", help="earnedPoints | balance | completedTasks"),
+):
+    """Show public universe points leaderboard."""
+    from nanobot.universe.protocol import Envelope, make_envelope
+    import websockets
+
+    cfg = load_config()
+    reg = registry or cfg.universe.public_registry_url
+
+    async def _run():
+        async with websockets.connect(reg) as ws:
+            req = make_envelope("leaderboard", payload={"limit": limit, "sortBy": sort_by})
+            await ws.send(req.to_json())
+            while True:
+                env = Envelope.from_json(await ws.recv())
+                if env.id == req.id and env.type in {"leaderboard_result", "error"}:
+                    return env
+
+    env = asyncio.run(_run())
+    if env.type == "error":
+        raise typer.Exit(code=1)
+
+    table = Table(title=f"Public Leaderboard (registry={reg})")
+    table.add_column("Node ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Balance")
+    table.add_column("Earned")
+    table.add_column("Spent")
+    table.add_column("Done")
+    for n in (env.payload or {}).get("nodes", []):
+        table.add_row(
+            n.get("nodeId", ""),
+            n.get("nodeName", ""),
+            str(n.get("balance", "")),
+            str(n.get("earnedPoints", "")),
+            str(n.get("spentPoints", "")),
+            str(n.get("completedTasks", "")),
         )
     console.print(table)
 
@@ -441,21 +742,45 @@ def public_call(
     require_cap: str = typer.Option("", "--require-cap", help="Required capability key (default: kind)"),
     to: str = typer.Option(None, "--to", help="Directly call a specific node_id (skip selection)"),
     service_token: str = typer.Option("", "--service-token", help="Service token if required by provider node"),
+    client_id: str = typer.Option("", "--client-id", help="Client node_id for rate limiting (optional)"),
     award_points: int = typer.Option(0, "--award", help="Award points to the provider in registry (MVP bookkeeping)"),
     registry_token: str = typer.Option("", "--registry-token", help="Registry token (if award requires it)"),
+    relay: str = typer.Option(None, "--relay", help="Relay URL override (ws://...)"),
+    relay_token: str = typer.Option("", "--relay-token", help="Relay token (if required)"),
+    direct: bool = typer.Option(False, "--direct", help="Force direct call (skip relay)"),
 ):
     """Call a public node to execute a task (direct node-to-node)."""
     import websockets
 
     from nanobot.universe.protocol import Envelope, make_envelope
+    from nanobot.universe.public_client import (
+        reserve_points,
+        commit_reservation,
+        cancel_reservation,
+        report_task,
+        knowledge_list,
+        knowledge_get,
+    )
+    from nanobot.universe.knowledge_store import save_pack
+    import time
 
     cfg = load_config()
     reg = registry or cfg.universe.public_registry_url
     cap = require_cap or kind
+    effective_client_id = client_id or cfg.universe.node_id or None
+    effective_registry_token = registry_token or cfg.universe.public_registry_token or ""
+    relay_url = None if direct else (relay or cfg.universe.public_relay_url or None)
+    effective_relay_token = relay_token or cfg.universe.public_relay_token or ""
+    relay_only = bool(cfg.universe.public_relay_only) and not direct
+    preauth_enabled = bool(getattr(cfg.universe, "public_preauth_enabled", True))
+    preauth_required = bool(getattr(cfg.universe, "public_preauth_required", False))
 
     async def _pick_target() -> dict:
         async with websockets.connect(reg) as ws:
-            req = make_envelope("list", payload={"onlineOnly": True, "requireCapabilities": [cap] if cap else []})
+            req = make_envelope(
+                "list",
+                payload={"onlineOnly": True, "requireCapabilities": [cap] if cap else []},
+            )
             await ws.send(req.to_json())
             while True:
                 env = Envelope.from_json(await ws.recv())
@@ -473,11 +798,29 @@ def public_call(
                     return nodes[0]
         raise RuntimeError("registry did not respond")
 
+    async def _resolve_endpoint(node_id: str) -> str:
+        if not effective_registry_token:
+            raise RuntimeError("registry token required to resolve endpoint")
+        async with websockets.connect(reg) as ws:
+            req = make_envelope("resolve", payload={"nodeId": node_id, "registryToken": effective_registry_token})
+            await ws.send(req.to_json())
+            while True:
+                env = Envelope.from_json(await ws.recv())
+                if env.id != req.id:
+                    continue
+                if env.type == "error":
+                    raise RuntimeError((env.payload or {}).get("message", "resolve failed"))
+                if env.type == "resolve_ok":
+                    endpoint = (env.payload or {}).get("endpointUrl", "")
+                    if not endpoint:
+                        raise RuntimeError("endpoint not available")
+                    return endpoint
+
     async def _call(endpoint_url: str, node_id: str) -> str:
         async with websockets.connect(endpoint_url) as ws:
             req = make_envelope(
                 "task_run",
-                payload={"kind": kind, "prompt": prompt, "serviceToken": service_token},
+                payload={"kind": kind, "prompt": prompt, "serviceToken": service_token, "clientId": effective_client_id},
             )
             await ws.send(req.to_json())
             while True:
@@ -494,20 +837,167 @@ def public_call(
         if award_points <= 0:
             return
         async with websockets.connect(reg) as ws:
-            req = make_envelope("award", payload={"nodeId": node_id, "points": award_points, "registryToken": registry_token})
+            req = make_envelope(
+                "award",
+                payload={
+                    "nodeId": node_id,
+                    "points": award_points,
+                    "registryToken": effective_registry_token,
+                    "payerNode": effective_client_id or "",
+                },
+            )
             await ws.send(req.to_json())
             env = Envelope.from_json(await ws.recv())
             if env.type != "award_ok":
                 raise RuntimeError((env.payload or {}).get("message", "award failed"))
 
+    async def _call_relay(node_id: str) -> str:
+        async with websockets.connect(relay_url) as ws:
+            req = make_envelope(
+                "relay_request",
+                payload={
+                    "nodeId": node_id,
+                    "kind": kind,
+                    "prompt": prompt,
+                    "serviceToken": service_token,
+                    "clientId": effective_client_id,
+                    "relayToken": effective_relay_token,
+                },
+            )
+            await ws.send(req.to_json())
+            while True:
+                env = Envelope.from_json(await ws.recv())
+                if env.id != req.id:
+                    continue
+                if env.type == "relay_response":
+                    ok = (env.payload or {}).get("ok")
+                    if ok:
+                        return (env.payload or {}).get("content", "")
+                    raise RuntimeError((env.payload or {}).get("message", "relay task failed"))
+                if env.type == "error":
+                    raise RuntimeError((env.payload or {}).get("message", "relay error"))
+
     async def _run():
         target = await _pick_target()
-        endpoint = target.get("endpointUrl", "")
         node_id = target.get("nodeId", "")
-        if not endpoint:
-            raise RuntimeError("target missing endpointUrl")
-        out = await _call(endpoint, node_id)
-        await _award(node_id)
+        if not node_id:
+            raise RuntimeError("target missing nodeId")
+        points_to_charge = int(award_points or (target.get("pricePoints", 1) or 1))
+        reservation_id = ""
+        start = time.monotonic()
+        if preauth_enabled:
+            if not effective_registry_token or not effective_client_id:
+                if preauth_required:
+                    raise RuntimeError("preauth requires registry_token and client_id")
+            else:
+                reservation_id = await reserve_points(
+                    registry_url=reg,
+                    registry_token=effective_registry_token,
+                    payer_node_id=str(effective_client_id),
+                    provider_node_id=node_id,
+                    points=points_to_charge,
+                )
+        if relay_url:
+            try:
+                out = await _call_relay(node_id)
+            except Exception:
+                if effective_registry_token:
+                    try:
+                        await report_task(
+                            registry_url=reg,
+                            registry_token=effective_registry_token,
+                            node_id=node_id,
+                            ok=False,
+                            latency_ms=int((time.monotonic() - start) * 1000),
+                        )
+                    except Exception:
+                        pass
+                if reservation_id:
+                    try:
+                        await cancel_reservation(
+                            registry_url=reg,
+                            registry_token=effective_registry_token,
+                            reservation_id=reservation_id,
+                        )
+                    except Exception:
+                        pass
+                raise
+        else:
+            if relay_only:
+                raise RuntimeError("relay_only enabled but relay URL is not configured")
+            try:
+                endpoint = await _resolve_endpoint(node_id)
+                out = await _call(endpoint, node_id)
+            except Exception:
+                if effective_registry_token:
+                    try:
+                        await report_task(
+                            registry_url=reg,
+                            registry_token=effective_registry_token,
+                            node_id=node_id,
+                            ok=False,
+                            latency_ms=int((time.monotonic() - start) * 1000),
+                        )
+                    except Exception:
+                        pass
+                if reservation_id:
+                    try:
+                        await cancel_reservation(
+                            registry_url=reg,
+                            registry_token=effective_registry_token,
+                            reservation_id=reservation_id,
+                        )
+                    except Exception:
+                        pass
+                raise
+        if reservation_id:
+            await commit_reservation(
+                registry_url=reg,
+                registry_token=effective_registry_token,
+                reservation_id=reservation_id,
+            )
+        else:
+            await _award(node_id)
+        if effective_registry_token:
+            try:
+                await report_task(
+                    registry_url=reg,
+                    registry_token=effective_registry_token,
+                    node_id=node_id,
+                    ok=True,
+                    latency_ms=int((time.monotonic() - start) * 1000),
+                )
+            except Exception:
+                pass
+        if getattr(cfg.universe, "public_knowledge_auto_pull", False):
+            try:
+                limit = max(1, int(getattr(cfg.universe, "public_knowledge_auto_pull_limit", 1) or 1))
+                tagged_only = bool(getattr(cfg.universe, "public_knowledge_auto_pull_tagged_only", True))
+                inbox_dir = getattr(cfg.universe, "public_knowledge_inbox_dir", "") or None
+                packs = await knowledge_list(
+                    registry_url=reg,
+                    registry_token=effective_registry_token or None,
+                    owner_node=node_id,
+                    tag=cap if tagged_only and cap else None,
+                    limit=limit,
+                )
+                if not packs and tagged_only:
+                    packs = await knowledge_list(
+                        registry_url=reg,
+                        registry_token=effective_registry_token or None,
+                        owner_node=node_id,
+                        tag=None,
+                        limit=limit,
+                    )
+                for meta in packs[:limit]:
+                    pack = await knowledge_get(
+                        registry_url=reg,
+                        registry_token=effective_registry_token or None,
+                        pack_id=meta.pack_id,
+                    )
+                    save_pack(pack, inbox_dir=inbox_dir)
+            except Exception:
+                pass
         return node_id, out
 
     node_id, out = asyncio.run(_run())
