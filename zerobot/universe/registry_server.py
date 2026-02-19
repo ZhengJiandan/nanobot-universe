@@ -513,6 +513,26 @@ class RegistryServer:
             await ws.send(make_envelope("update_ok", id=env.id).to_json())
             return
 
+        if env.type == "unregister":
+            token = (env.payload or {}).get("registryToken", "")
+            if not self._check_token(token):
+                await ws.send(make_envelope("error", id=env.id, payload={"message": "invalid registry token"}).to_json())
+                return
+            node_id = (env.payload or {}).get("nodeId") or env.from_node
+            if not node_id:
+                await ws.send(make_envelope("error", id=env.id, payload={"message": "missing nodeId"}).to_json())
+                return
+            ok = await self.state.remove(str(node_id))
+            if not ok:
+                await ws.send(make_envelope("error", id=env.id, payload={"message": "node not found"}).to_json())
+                return
+            if self._state_path:
+                await self.state.save(self._state_path)
+            if self._ws_to_node.get(ws) == node_id:
+                self._ws_to_node.pop(ws, None)
+            await ws.send(make_envelope("unregister_ok", id=env.id, payload={"nodeId": node_id}).to_json())
+            return
+
         if env.type == "resolve":
             token = (env.payload or {}).get("registryToken", "")
             if not self._check_token(token):

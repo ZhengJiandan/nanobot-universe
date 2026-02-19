@@ -204,7 +204,6 @@ def onboard():
             config.universe.node_id = str(uuid4())
         config.universe.public_enabled = True
         config.universe.public_provide_service = True
-        config.universe.public_auto_register = True
         config.universe.public_detect_public_ip = True
 
         try:
@@ -212,6 +211,8 @@ def onboard():
         except Exception:
             allow_agent_tasks = False
         config.universe.public_allow_agent_tasks = allow_agent_tasks
+        if allow_agent_tasks:
+            config.universe.public_auto_register = True
 
         try:
             enable_auto_delegate = typer.confirm("Enable auto-delegate when local run is blocked?", default=False)
@@ -220,7 +221,10 @@ def onboard():
         config.universe.public_auto_delegate_enabled = enable_auto_delegate
 
         save_config(config)
-        console.print("[green]✓[/green] Public universe enabled and auto-register configured")
+        if allow_agent_tasks:
+            console.print("[green]✓[/green] Public universe enabled and auto-register configured")
+        else:
+            console.print("[green]✓[/green] Public universe enabled")
     else:
         console.print("[dim]Public universe not enabled. You can turn it on later with `zerobot universe public enable`.[/dim]")
     
@@ -443,7 +447,9 @@ def gateway(
     
     async def run():
         from zerobot.universe.public_service import maybe_start_public_service, stop_public_service
-        public_handle = await maybe_start_public_service(config, log_prefix="universe")
+        public_handle = None
+        if config.universe.public_auto_register:
+            public_handle = await maybe_start_public_service(config, log_prefix="universe")
         try:
             await cron.start()
             await heartbeat.start()

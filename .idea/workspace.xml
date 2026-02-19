@@ -1,120 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="f186372c-d511-4782-9505-26fb7903e24e" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/nanobot-universe.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/LICENSE" beforeDir="false" afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/SECURITY.md" beforeDir="false" afterPath="$PROJECT_DIR$/SECURITY.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bridge/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/bridge/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bridge/src/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/bridge/src/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bridge/src/whatsapp.ts" beforeDir="false" afterPath="$PROJECT_DIR$/bridge/src/whatsapp.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core_agent_lines.sh" beforeDir="false" afterPath="$PROJECT_DIR$/core_agent_lines.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/__main__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/context.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/loop.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/memory.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/skills.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/subagent.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/base.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/cron.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/filesystem.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/mcp.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/message.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/registry.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/shell.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/spawn.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/universe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/agent/tools/web.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/bus/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/bus/events.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/bus/queue.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/base.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/dingtalk.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/discord.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/email.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/feishu.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/manager.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/mochat.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/qq.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/slack.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/telegram.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/channels/whatsapp.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cli/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cli/commands.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cli/universe.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/config/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/config/loader.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/config/schema.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cron/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cron/service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/cron/types.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/heartbeat/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/heartbeat/service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/base.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/litellm_provider.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/openai_codex_provider.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/registry.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/providers/transcription.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/session/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/session/manager.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/README.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/cron/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/github/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/memory/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/skill-creator/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/summarize/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/tmux/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/tmux/scripts/find-sessions.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/tmux/scripts/wait-for-text.sh" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/skills/weather/SKILL.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/client.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/hub_cli.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/hub_server.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/hub_state.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/knowledge_store.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/node_server.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/protocol.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/public_client.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/public_service.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/ratelimit.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/registry_bridge_cli.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/registry_cli.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/registry_server.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/registry_state.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/relay_cli.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/relay_client.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/relay_server.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/remote_agent.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/universe/task_executor.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/utils/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot/utils/helpers.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot_arch.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/nanobot_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_cli_input.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_cli_input.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_commands.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_commands.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_consolidate_offset.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_consolidate_offset.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_docker.sh" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_docker.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_email_channel.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_email_channel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_tool_validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_tool_validation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/AGENTS.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/HEARTBEAT.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/HEARTBEAT.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/SOUL.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/SOUL.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/TOOLS.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/TOOLS.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/USER.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/USER.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/workspace/memory/MEMORY.md" beforeDir="false" afterPath="$PROJECT_DIR$/workspace/memory/MEMORY.md" afterDir="false" />
+    <list default="true" id="f186372c-d511-4782-9505-26fb7903e24e" name="Changes" comment="init">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/cli/commands.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/cli/commands.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/cli/universe.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/cli/universe.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/universe/registry_cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/universe/registry_cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/universe/registry_server.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/universe/registry_server.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/universe/registry_state.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/universe/registry_state.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/zerobot/universe/relay_cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/zerobot/universe/relay_cli.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -148,6 +45,25 @@
       <option name="presentableId" value="Default" />
       <updated>1771505537038</updated>
     </task>
+    <task id="LOCAL-00001" summary="init">
+      <created>1771506142819</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1771506142819</updated>
+    </task>
+    <task id="LOCAL-00002" summary="init">
+      <created>1771507173849</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1771507173849</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="init" />
+    <option name="LAST_COMMIT_MESSAGE" value="init" />
   </component>
 </project>

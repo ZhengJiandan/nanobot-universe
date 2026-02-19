@@ -353,6 +353,72 @@ def public_disable():
     console.print("[green]✓[/green] Public universe disabled.")
 
 
+@public_app.command("register")
+def public_register(
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    host: str = typer.Option(None, "--host", help="Bind host for node service"),
+    port: int = typer.Option(None, "--port", help="Bind port for node service"),
+    advertise: str = typer.Option(None, "--advertise", help="Advertised endpoint URL, e.g. ws://YOUR_IP:18998"),
+    name: str = typer.Option(None, "--name", help="Node display name override"),
+    price: int = typer.Option(None, "--price", help="Price points per task"),
+    registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
+):
+    """Register this node and serve it publicly (same as public serve)."""
+    cfg = load_config()
+    if not cfg.universe.node_id:
+        cfg.universe.node_id = str(uuid4())
+    cfg.universe.public_enabled = True
+    cfg.universe.public_provide_service = True
+    cfg.universe.public_auto_register = True
+    save_config(cfg)
+    public_serve(
+        registry=registry,
+        host=host,
+        port=port,
+        advertise=advertise,
+        name=name,
+        price=price,
+        registry_token=registry_token,
+    )
+
+
+@public_app.command("unregister")
+def public_unregister(
+    registry: str = typer.Option(None, "--registry", help="Registry URL override"),
+    registry_token: str = typer.Option(None, "--registry-token", help="Registry token (if required)"),
+    node_id: str = typer.Option(None, "--node-id", help="Node ID override"),
+):
+    """Unregister this node from the public registry."""
+    from zerobot.universe.protocol import Envelope, make_envelope
+    import websockets
+
+    cfg = load_config()
+    reg = registry or cfg.universe.public_registry_url
+    token = registry_token or cfg.universe.public_registry_token or ""
+    node = node_id or cfg.universe.node_id
+    if not node:
+        console.print("[red]Error: node_id is missing. Run `zerobot onboard` or set it in config.[/red]")
+        raise typer.Exit(1)
+
+    async def _run():
+        async with websockets.connect(reg) as ws:
+            req = make_envelope(
+                "unregister",
+                payload={"nodeId": node, "registryToken": token},
+            )
+            await ws.send(req.to_json())
+            return Envelope.from_json(await ws.recv())
+
+    env = asyncio.run(_run())
+    if env.type == "error":
+        message = (env.payload or {}).get("message", "unregister failed")
+        console.print(f"[red]Error:[/red] {message}")
+        raise typer.Exit(1)
+
+    console.print(f"[green]✓[/green] Unregistered {node} from {reg}")
+    console.print("[dim]If a public service is still running, it may re-register. Stop the service to stay offline.[/dim]")
+
+
 @public_app.command("list")
 def public_list(
     registry: str = typer.Option(None, "--registry", help="Registry URL override"),
@@ -367,6 +433,24 @@ def public_list(
 
     cfg = load_config()
     reg = registry or cfg.universe.public_registry_url
+    display_reg = reg
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(reg)
+        if parts.hostname == "82.157.31.6":
+            userinfo = ""
+            if parts.username:
+                userinfo = parts.username
+                if parts.password:
+                    userinfo += f":{parts.password}"
+                userinfo += "@"
+            netloc = f"{userinfo}zerobot.work"
+            if parts.port:
+                netloc = f"{netloc}:{parts.port}"
+            display_reg = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    except Exception:
+        display_reg = reg
 
     async def _run():
         async with websockets.connect(reg) as ws:
@@ -388,7 +472,7 @@ def public_list(
     if env.type == "error":
         raise typer.Exit(code=1)
 
-    table = Table(title=f"Public Nodes (registry={reg})")
+    table = Table(title=f"Public Nodes (registry={display_reg})")
     table.add_column("Node ID", style="cyan")
     table.add_column("Name")
     table.add_column("Price")

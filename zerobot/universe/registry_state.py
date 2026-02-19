@@ -158,6 +158,19 @@ class RegistryState:
                 self.nodes[node_id].online = False
                 self.nodes[node_id].last_seen_ts = _utc_ts()
 
+    async def remove(self, node_id: str) -> bool:
+        async with self.lock:
+            entry = self.nodes.pop(node_id, None)
+            if not entry:
+                return False
+            for cap in (entry.capabilities or {}).keys():
+                ids = self.cap_index.get(cap)
+                if ids and node_id in ids:
+                    ids.discard(node_id)
+                    if not ids:
+                        self.cap_index.pop(cap, None)
+            return True
+
     async def list_online(self) -> list[RegistryEntry]:
         async with self.lock:
             return [e for e in self.nodes.values() if e.online]
