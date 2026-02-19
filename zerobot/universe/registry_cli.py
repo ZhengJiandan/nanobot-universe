@@ -38,7 +38,6 @@ def run(
             sys.executable,
             "-m",
             "zerobot.universe.registry_cli",
-            "run",
             "--foreground",
             "--host",
             host,

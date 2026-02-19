@@ -30,7 +30,6 @@ def run(
             sys.executable,
             "-m",
             "zerobot.universe.relay_cli",
-            "run",
             "--foreground",
             "--host",
             host,
