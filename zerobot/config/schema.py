@@ -268,7 +268,7 @@ class UniverseConfig(BaseModel):
 
     # Public universe: registry discovery + direct node-to-node calls (opt-in).
     public_enabled: bool = False
-    public_registry_url: str = "ws://82.157.31.6:18999"
+    public_registry_url: str = "ws://zerobot.work:18999"
     public_provide_service: bool = False
     public_service_host: str = "0.0.0.0"
     public_service_port: int = 18998
@@ -293,7 +293,7 @@ class UniverseConfig(BaseModel):
     public_tools: list[str] = Field(default_factory=list)
     public_models: list[str] = Field(default_factory=list)
     public_languages: list[str] = Field(default_factory=list)
-    public_relay_url: str = ""  # ws://relay-host:port
+    public_relay_url: str = "ws://zerobot.work:19001"  # ws://relay-host:port
     public_relay_token: str = ""
     public_relay_only: bool = False
     public_preauth_enabled: bool = True

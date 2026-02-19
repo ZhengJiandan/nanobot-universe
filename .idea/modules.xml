@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/nanobot-universe.iml" filepath="$PROJECT_DIR$/.idea/nanobot-universe.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/zerobot.iml" filepath="$PROJECT_DIR$/.idea/zerobot.iml" />
     </modules>
   </component>
 </project>
