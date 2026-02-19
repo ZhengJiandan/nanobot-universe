@@ -205,6 +205,11 @@ def onboard():
         config.universe.public_enabled = True
         config.universe.public_provide_service = True
         config.universe.public_detect_public_ip = True
+        if not config.universe.public_registry_url:
+            config.universe.public_registry_url = "ws://zerobot.work:18999"
+        if not config.universe.public_relay_url:
+            config.universe.public_relay_url = "ws://zerobot.work:19001"
+        config.universe.public_relay_only = True
 
         try:
             allow_agent_tasks = typer.confirm("Allow this node to run zerobot.agent tasks for others?", default=False)
@@ -215,9 +220,9 @@ def onboard():
             config.universe.public_auto_register = True
 
         try:
-            enable_auto_delegate = typer.confirm("Enable auto-delegate when local run is blocked?", default=False)
+            enable_auto_delegate = typer.confirm("Enable auto-delegate when local run is blocked?", default=True)
         except Exception:
-            enable_auto_delegate = False
+            enable_auto_delegate = True
         config.universe.public_auto_delegate_enabled = enable_auto_delegate
 
         save_config(config)
