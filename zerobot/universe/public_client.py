@@ -442,12 +442,19 @@ async def delegate_task(
     preauth_enabled: bool = True,
     preauth_required: bool = False,
 ) -> tuple[PublicNode, str]:
+    # Avoid delegating to self by default.
+    if client_id:
+        client_id = str(client_id)
     cap = require_capability or kind
     nodes = await list_public_nodes(
         registry_url=registry_url,
         registry_token=registry_token,
         require_capabilities=[cap] if cap else [],
     )
+    if client_id:
+        nodes = [n for n in nodes if n.node_id != client_id]
+    if not nodes:
+        raise RuntimeError("no eligible nodes found")
     if to_node_id:
         for n in nodes:
             if n.node_id == to_node_id:
