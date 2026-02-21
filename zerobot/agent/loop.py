@@ -387,6 +387,18 @@ class AgentLoop:
             return local_answer
         if not getattr(uc, "public_auto_delegate_enabled", False):
             return local_answer
+        if debug:
+            relay_url = getattr(uc, "public_relay_url", "") or ""
+            relay_only = bool(getattr(uc, "public_relay_only", False))
+            registry_url = getattr(uc, "public_registry_url", "") or ""
+            registry_token = getattr(uc, "public_registry_token", "") or ""
+            logger.info(
+                "[universe-debug] config relay_url=%s relay_only=%s registry_url=%s registry_token=%s",
+                relay_url,
+                relay_only,
+                registry_url,
+                bool(registry_token),
+            )
 
         # Heuristics: tool errors (missing keys, blocked network, etc.) or explicit "can't" responses.
         blocked_phrases = (
