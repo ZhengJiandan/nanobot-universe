@@ -83,7 +83,7 @@ class RelayServer:
                         await ws.send(make_envelope("error", id=env.id, payload={"message": "missing nodeId"}).to_json())
                         continue
                     self._nodes[node_id] = ws
-                    logger.info("Relay node connected: node_id=%s", node_id)
+                    logger.info("Relay node connected: node_id={}", node_id)
                     await ws.send(make_envelope("relay_hello_ok", id=env.id, payload={"nodeId": node_id}).to_json())
                     continue
 
@@ -102,7 +102,7 @@ class RelayServer:
                         continue
 
                     logger.info(
-                        "Relay request: target=%s kind=%s client_id=%s",
+                        "Relay request: target={} kind={} client_id={}",
                         target,
                         (env.payload or {}).get("kind"),
                         (env.payload or {}).get("clientId"),
@@ -135,7 +135,7 @@ class RelayServer:
                     if entry:
                         client_ws = entry.get("client_ws")
                         client_id = entry.get("client_id") or env.id
-                        logger.info("Relay response: request_id=%s", client_id)
+                        logger.info("Relay response: request_id={}", client_id)
                         response = make_envelope("relay_response", id=client_id, payload=env.payload or {})
                         await self._safe_send(client_ws, response.to_json())
                     continue
@@ -145,7 +145,7 @@ class RelayServer:
             # Clean up node mapping if this ws was a node
             if node_id and self._nodes.get(node_id) is ws:
                 self._nodes.pop(node_id, None)
-                logger.info("Relay node disconnected: node_id=%s", node_id)
+                logger.info("Relay node disconnected: node_id={}", node_id)
             # Remove pending for this client
             dead = [
                 req_id
