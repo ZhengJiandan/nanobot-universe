@@ -98,6 +98,18 @@ class NodeServer:
                     await ws.send(make_envelope("error", id=env.id, payload={"message": "missing prompt"}).to_json())
                     continue
 
+                client_id = (env.payload or {}).get("clientId") or ""
+                try:
+                    peer = ws.remote_address[0] if ws.remote_address else "unknown"
+                except Exception:
+                    peer = "unknown"
+                logger.info(
+                    "Universe node received task: kind=%s client_id=%s from=%s",
+                    kind,
+                    client_id or "-",
+                    peer,
+                )
+
                 try:
                     result = await self._executor.run(kind, prompt)
                     await ws.send(make_envelope("task_result", id=env.id, payload={"content": result}).to_json())
