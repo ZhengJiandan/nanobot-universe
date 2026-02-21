@@ -206,9 +206,9 @@ def onboard():
         config.universe.public_provide_service = True
         config.universe.public_detect_public_ip = True
         if not config.universe.public_registry_url:
-            config.universe.public_registry_url = "ws://zerobot.work:18999"
+            config.universe.public_registry_url = "ws://82.157.31.6:18999"
         if not config.universe.public_relay_url:
-            config.universe.public_relay_url = "ws://zerobot.work:19001"
+            config.universe.public_relay_url = "ws://82.157.31.6:19001"
         config.universe.public_relay_only = True
 
         try:
